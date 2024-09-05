@@ -11,20 +11,22 @@ pub const FrameT = coro.FrameT;
 pub const Runtime = struct {
     allocator: std.mem.Allocator,
     pool: ?*xev.ThreadPool,
+    stack_size: usize = 4 * 1024 * 1024,
 
     // INIT / DEINIT
 
     // Allocates on the heap and returns a pointer to ensure pointer stability.
-    pub fn init(allocator: std.mem.Allocator) !*Runtime {
+    pub fn init(allocator: std.mem.Allocator, stack_size: ?usize) !*Runtime {
         var pool: ?*xev.ThreadPool = null;
         if (xev.backend == .epoll or xev.backend == .kqueue) {
             pool = try allocator.create(xev.ThreadPool);
             pool.?.* = xev.ThreadPool.init(.{});
         }
 
-        const context = try allocator.create(Runtime);
-        context.* = .{ .allocator = allocator, .pool = pool };
-        return context;
+        const runtime = try allocator.create(Runtime);
+        runtime.* = .{ .allocator = allocator, .pool = pool };
+        if (stack_size) |size| runtime.stack_size = size;
+        return runtime;
     }
 
     pub fn deinit(self: *Runtime) void {
@@ -55,12 +57,16 @@ pub const Runtime = struct {
         }.call;
     }
 
-    pub fn spawnThread(self: *Runtime, stack_size: ?usize, comptime function: anytype, args: anytype) !Thread {
-        var spawn_config = Thread.SpawnConfig{ .allocator = self.allocator };
-        if (stack_size) |size| spawn_config.stack_size = size;
-
-        const thread_ctx = try ThreadContext.init(self);
-        return try Thread.spawn(spawn_config, wrapThread(function), .{ thread_ctx, args });
+    // Spawn a thread with a ThreadContext so it can execute coroutines.
+    //
+    // The default stack size is reduced from Zig's default 16 MiB to 4 MiB.
+    // This is subject to change.
+    pub fn spawnThread(self: *Runtime, comptime function: anytype, args: anytype) !Thread {
+        return try Thread.spawn(
+            .{ .allocator = self.allocator, .stack_size = self.stack_size },
+            wrapThread(function),
+            .{ try ThreadContext.init(self), args },
+        );
     }
 };
 

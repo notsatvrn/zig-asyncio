@@ -2,9 +2,9 @@ const std = @import("std");
 const asyncio = @import("asyncio");
 
 test "basics" {
-    const rt = try asyncio.Runtime.init(std.testing.allocator);
+    const rt = try asyncio.Runtime.init(std.testing.allocator, null);
 
-    const thread = try rt.spawnThread(null, basicThread, .{});
+    const thread = try rt.spawnThread(basicThread, .{});
 
     thread.join();
     rt.deinit();
