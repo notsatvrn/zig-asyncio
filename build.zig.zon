@@ -4,13 +4,13 @@
 
     .dependencies = .{
         .zigcoro = .{
-            .url = "git+https://github.com/rsepassi/zigcoro#fc1db29dee049ce572a516f1586cce0eca4fcb2a",
-            .hash = "1220d92d294edf8d4575f010696728473a5333f4bf243f4e7b73d7eb7b9503adbfa6",
+            .url = "git+https://github.com/notsatvrn/zigcoro#048f1d02ae7c906ff1bb2c33c73c03335b95a23a",
+            .hash = "12206c1594a8292e680c82c24522bba69ea1d4cc13bc4bd8939b2b72a6d4fd0fa4ce",
         },
         // must match version used in zigcoco; update when updating zigcoro
         .libxev = .{
-            .url = "git+https://github.com/mitchellh/libxev#990ebb3be53f6f10e79504d74d77d2c4f95bbce0",
-            .hash = "12203d0b9555865f3ebcb9fc4670c5c46555e6458fbc51eb4620cfef8123a9640c90",
+            .url = "git+https://github.com/mitchellh/libxev#dbe22910a43e9e8ec9948d3cbd73d8488a074967",
+            .hash = "122034fb023830dad380a030f986cb33059fa20d65ae0b615312597425959df665b7",
         },
     },
 

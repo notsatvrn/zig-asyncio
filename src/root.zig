@@ -10,12 +10,16 @@ pub const FrameT = coro.FrameT;
 
 pub const Runtime = struct {
     allocator: std.mem.Allocator,
+    lock: Thread.Mutex = .{},
     pool: ?*xev.ThreadPool,
     stack_size: usize = 4 * 1024 * 1024,
 
     // INIT / DEINIT
 
+    // Initialize a Runtime with an allocator and optional thread stack size.
     // Allocates on the heap and returns a pointer to ensure pointer stability.
+    //
+    // The default stack size is reduced from Zig's default 16 MiB to 4 MiB.
     pub fn init(allocator: std.mem.Allocator, stack_size: ?usize) !*Runtime {
         var pool: ?*xev.ThreadPool = null;
         if (xev.backend == .epoll or xev.backend == .kqueue) {
@@ -58,9 +62,7 @@ pub const Runtime = struct {
     }
 
     // Spawn a thread with a ThreadContext so it can execute coroutines.
-    //
-    // The default stack size is reduced from Zig's default 16 MiB to 4 MiB.
-    // This is subject to change.
+    // This function is not thread-safe. Only call from the thread the Runtime was created in.
     pub fn spawnThread(self: *Runtime, comptime function: anytype, args: anytype) !Thread {
         return try Thread.spawn(
             .{ .allocator = self.allocator, .stack_size = self.stack_size },
@@ -82,7 +84,10 @@ pub const ThreadContext = struct {
 
     // INIT / DEINIT
 
+    // Initialize a ThreadContext with a pointer to a Runtime.
     // Allocates on the heap and returns a pointer to ensure pointer stability.
+    //
+    // Avoid calling this directly. This function is not thread-safe because it assumes it will be called by the same thread the Runtime was made in, usually by Runtime.spawnThread.
     pub fn init(rt: *Runtime) !*Self {
         const loop = try rt.allocator.create(xev.Loop);
         const exec = try rt.allocator.create(aio.Executor);
@@ -96,9 +101,12 @@ pub const ThreadContext = struct {
 
     pub fn deinit(self: *Self) void {
         self.exec.loop.deinit();
-        self.rt.allocator.destroy(self.exec.loop);
-        self.rt.allocator.destroy(self.exec);
-        self.rt.allocator.destroy(self);
+        const rt = self.rt;
+        rt.lock.lock();
+        rt.allocator.destroy(self.exec.loop);
+        rt.allocator.destroy(self.exec);
+        rt.allocator.destroy(self);
+        rt.lock.unlock();
     }
 
     // MISC
@@ -125,6 +133,8 @@ pub const TCPListener = struct {
 
     raw: aio.TCP,
 
+    // Initialize a TCPListener with the current ThreadContext.
+    // Must be called from a thread spawned by a runtime or a child coroutine.
     pub fn init(addr: std.net.Address, backlog: ?u31) !Self {
         const ctx = ThreadContext.current orelse return error.ContextUnavailable;
 
@@ -147,6 +157,8 @@ pub const TCPStream = struct {
 
     raw: aio.TCP,
 
+    // Initialize a TCPListener with the current ThreadContext.
+    // Must be called from a thread spawned by a runtime or a child coroutine.
     pub fn init(addr: std.net.Address) !Self {
         const ctx = ThreadContext.current orelse return error.ContextUnavailable;
 
@@ -200,5 +212,48 @@ pub const UDPStream = struct {
     pub fn init(addr: std.net.Address) !Self {
         const ctx = ThreadContext.current orelse return error.ContextUnavailable;
         return .{ .raw = aio.UDP.init(ctx.exec, try xev.UDP.init(addr)) };
+    }
+
+    // CONNECTION
+
+    pub const Connected = struct {
+        stream: Self,
+        addr: std.net.Address,
+
+        pub inline fn write(self: Connected, bytes: []const u8) !usize {
+            return self.stream.raw.write(self.addr, .{ .slice = bytes });
+        }
+
+        pub inline fn read(self: Connected, buffer: []const u8) !usize {
+            return self.stream.raw.read(self.addr, .{ .slice = buffer });
+        }
+    };
+
+    pub inline fn connect(self: Self, addr: std.net.Address) Connected {
+        return .{ .stream = self, .addr = addr };
+    }
+
+    // READ
+
+    pub inline fn readFrom(self: Self, buffer: []const u8) !struct { usize, std.net.Address } {
+        return self.raw.read(null, .{ .slice = buffer });
+    }
+
+    const ReadT = @typeInfo(@TypeOf(Connected.read)).Fn.return_type.?;
+    pub const Reader = std.io.Reader(Connected, @typeInfo(ReadT).ErrorUnion.error_set, Connected.read);
+    pub inline fn reader(self: Self, addr: std.net.Address) Reader {
+        return .{ .context = .{ .stream = self, .addr = addr } };
+    }
+
+    // WRITE
+
+    pub inline fn writeTo(self: Self, addr: std.net.Address, bytes: []const u8) !usize {
+        return self.raw.write(addr, .{ .slice = bytes });
+    }
+
+    const WriteT = @typeInfo(@TypeOf(Connected.write)).Fn.return_type.?;
+    pub const Writer = std.io.Writer(Connected, @typeInfo(WriteT).ErrorUnion.error_set, Connected.write);
+    pub inline fn writer(self: Self, addr: std.net.Address) Writer {
+        return .{ .context = .{ .stream = self, .addr = addr } };
     }
 };
