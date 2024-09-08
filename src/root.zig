@@ -43,7 +43,7 @@ pub const Runtime = struct {
         return runtime;
     }
 
-    pub fn deinit(self: *Runtime) void {
+    pub inline fn deinit(self: *Runtime) void {
         self.pool.deinit();
         self.allocator.destroy(self);
     }
@@ -57,18 +57,24 @@ pub const Runtime = struct {
 
         return struct {
             pub fn call(ctx: *WorkerContext, args: anytype) typ.Fn.return_type.? {
-                defer WorkerContext.deinit();
+                defer if (WorkerContext.current) |self| {
+                    WorkerContext.current = null;
+                    self.sched.deinit();
+                    self.rt.allocator.destroy(self);
+                };
                 WorkerContext.current = ctx;
                 return @call(.always_inline, func, args);
             }
         }.call;
     }
 
-    // Spawn a thread with a WorkerContext so it can execute coroutines.
+    // Spawn a thread and set up a WorkerContext so it can execute coroutines.
     // This function is not thread-safe. Only call from the thread the Runtime was created in.
     pub fn spawnWorker(self: *Runtime, comptime function: anytype, args: anytype) !Thread {
         const config = .{ .allocator = self.allocator, .stack_size = self.stack_size };
-        return Thread.spawn(config, wrapWorker(function), .{ try WorkerContext.init(self), args });
+        const ctx = try self.allocator.create(WorkerContext);
+        ctx.* = .{ .rt = self, .sched = try coro.Scheduler.init(self.allocator, .{}) };
+        return Thread.spawn(config, wrapWorker(function), .{ ctx, args });
     }
 
     // TASKS
@@ -87,24 +93,6 @@ pub const WorkerContext = struct {
 
     pub threadlocal var current: ?*WorkerContext = null;
 
-    // INIT / DEINIT
-
-    // Initialize a WorkerContext with a Runtime.
-    // Allocates on the heap and returns a pointer to ensure pointer stability.
-    fn init(rt: *Runtime) !*WorkerContext {
-        const ctx = try rt.allocator.create(WorkerContext);
-        ctx.* = .{ .rt = rt, .sched = try coro.Scheduler.init(rt.allocator, .{}) };
-        return ctx;
-    }
-
-    inline fn deinit() void {
-        if (current) |self| {
-            current = null;
-            self.sched.deinit();
-            self.rt.allocator.destroy(self);
-        }
-    }
-
     // TASKS
 
     pub inline fn spawn(self: *WorkerContext, comptime func: anytype, args: anytype) SpawnError!Task.Generic(minilib.ReturnType(func)) {
@@ -118,6 +106,11 @@ pub const WorkerContext = struct {
 };
 
 // ADDITIONAL HELPERS
+
+pub inline fn yieldWhileBlocking(func: anytype, args: anytype) !void {
+    const ctx = WorkerContext.current orelse return error.ContextUnavailable;
+    return ctx.rt.yieldWhileBlocking(func, args);
+}
 
 pub inline fn spawn(comptime func: anytype, args: anytype) !Task.Generic(minilib.ReturnType(func)) {
     const ctx = WorkerContext.current orelse return error.ContextUnavailable;
