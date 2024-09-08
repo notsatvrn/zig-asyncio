@@ -22,6 +22,7 @@ pub const Runtime = struct {
     // INIT / DEINIT
 
     // Initialize a Runtime with an allocator.
+    // The provided allocator is assumed to be thread-safe!
     // Allocates on the heap and returns a pointer to ensure pointer stability.
     //
     // The default stack size is reduced from Zig's default 16 MiB to 4 MiB.
@@ -30,12 +31,12 @@ pub const Runtime = struct {
     }
 
     // Initialize a Runtime with an allocator and thread/task stack size.
+    // The provided allocator is assumed to be thread-safe!
     // Allocates on the heap and returns a pointer to ensure pointer stability.
     pub fn withStackSize(allocator: std.mem.Allocator, stack_size: usize) !*Runtime {
         const runtime = try allocator.create(Runtime);
-        var threaded = std.heap.ThreadSafeAllocator{ .child_allocator = allocator };
         runtime.* = .{
-            .allocator = threaded.allocator(),
+            .allocator = allocator,
             .pool = try ThreadPool.init(allocator, .{}),
             .stack_size = stack_size,
         };
@@ -90,8 +91,6 @@ pub const WorkerContext = struct {
 
     // Initialize a WorkerContext with a Runtime.
     // Allocates on the heap and returns a pointer to ensure pointer stability.
-    //
-    // Avoid calling this directly. This function is not thread-safe because it assumes it will be called by the same thread the Runtime was made in, usually by Runtime.spawnWorker.
     fn init(rt: *Runtime) !*WorkerContext {
         const ctx = try rt.allocator.create(WorkerContext);
         ctx.* = .{ .rt = rt, .sched = try coro.Scheduler.init(rt.allocator, .{}) };
@@ -100,6 +99,7 @@ pub const WorkerContext = struct {
 
     inline fn deinit() void {
         if (current) |self| {
+            current = null;
             self.sched.deinit();
             self.rt.allocator.destroy(self);
         }

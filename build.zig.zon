@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .aio = .{
-            .url = "git+https://github.com/Cloudef/zig-aio#630207a1c4dede36ee842e4f51ca914b49d1c0b0",
-            .hash = "1220aa5f9c93650ed9f4933f92787f473713c48d6b7e3aeda2d462805e351c416525",
+            .url = "git+https://github.com/notsatvrn/zig-aio#dd511eb9e0ca737b71f159990bfb5c23dc4b1289",
+            .hash = "122002016f8441dacb91ae06e110761be9cc2e9d8dcd873074e98ab16c5b2ac0c5de",
         },
     },
 
