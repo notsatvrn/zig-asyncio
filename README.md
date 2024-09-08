@@ -1,7 +1,7 @@
-# zig-asyncio
+# zig-folio
 
-A high-level Zig library for dead simple asynchronous I/O.
+A high-level Zig library for dead simple asynchronous I/O. The provided API should feel familiar to those transitioning from using Rust with Tokio.
 
-This library is a rather minimal wrapper around [libxev](https://github.com/mitchellh/libxev) and [zigcoro](https://github.com/rsepassi/zigcoro) to provide an API that's a bit easier to use. Please support the creators of both projects, as this one would not be possible without their invaluable work! Also, don't flood their issue page with bugs until it's confirmed that it's an issue on _their_ end. Always make an issue here first.
+This library is a wrapper around [zig-aio](https://github.com/Cloudef/zig-aio) which attempts to provide an intuitive API. Please show the developer of said project your support! Also, if you use this library, _always_ make issues here first so I can determine if it's a problem on our side or theirs.
 
-Please note that when (and if) built-in async support for Zig returns, this project will not be ready. It was written with the pessimistic assumption that it would be too difficult to bring back and will be dropped.
+**_When (and if) built-in async support for Zig returns, this project will not be ready._** It was written with the pessimistic assumption that it would be too difficult to bring back and will be dropped.

@@ -8,34 +8,35 @@ pub fn build(b: *std.Build) void {
 
     // DEPENDENCIES
 
-    const coro = b.dependency("zigcoro", .{});
-    const xev = b.dependency("libxev", .{});
+    const aio = b.dependency("aio", .{});
 
     // MODULE
 
     const options = b.addOptions();
     const options_module = options.createModule();
-    const asyncio = b.addModule("asyncio", .{
+    const folio = b.addModule("folio", .{
         .root_source_file = b.path("src/root.zig"),
         .imports = &.{
             .{ .name = "options", .module = options_module },
-            .{ .name = "coro", .module = coro.module("libcoro") },
-            .{ .name = "xev", .module = xev.module("xev") },
+            .{ .name = "aio", .module = aio.module("aio") },
+            .{ .name = "coro", .module = aio.module("coro") },
+            .{ .name = "minilib", .module = aio.module("minilib") },
         },
     });
 
     // LIBRARY
 
     const lib = b.addStaticLibrary(.{
-        .name = "zig-asyncio",
+        .name = "zig-folio",
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     lib.linkLibC();
-    lib.root_module.addImport("coro", coro.module("libcoro"));
-    lib.root_module.addImport("xev", xev.module("xev"));
+    lib.root_module.addImport("aio", aio.module("aio"));
+    lib.root_module.addImport("coro", aio.module("coro"));
+    lib.root_module.addImport("minilib", aio.module("minilib"));
     b.installArtifact(lib);
 
     // TESTS
@@ -47,7 +48,7 @@ pub fn build(b: *std.Build) void {
     });
 
     tests.linkLibC();
-    tests.root_module.addImport("asyncio", asyncio);
+    tests.root_module.addImport("folio", folio);
 
     const run_tests = b.addRunArtifact(tests);
 

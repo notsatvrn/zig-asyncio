@@ -1,16 +1,11 @@
 .{
-    .name = "asyncio",
+    .name = "folio",
     .version = "0.0.0",
 
     .dependencies = .{
-        .zigcoro = .{
-            .url = "git+https://github.com/notsatvrn/zigcoro#048f1d02ae7c906ff1bb2c33c73c03335b95a23a",
-            .hash = "12206c1594a8292e680c82c24522bba69ea1d4cc13bc4bd8939b2b72a6d4fd0fa4ce",
-        },
-        // must match version used in zigcoco; update when updating zigcoro
-        .libxev = .{
-            .url = "git+https://github.com/mitchellh/libxev#dbe22910a43e9e8ec9948d3cbd73d8488a074967",
-            .hash = "122034fb023830dad380a030f986cb33059fa20d65ae0b615312597425959df665b7",
+        .aio = .{
+            .url = "git+https://github.com/Cloudef/zig-aio#630207a1c4dede36ee842e4f51ca914b49d1c0b0",
+            .hash = "1220aa5f9c93650ed9f4933f92787f473713c48d6b7e3aeda2d462805e351c416525",
         },
     },
 

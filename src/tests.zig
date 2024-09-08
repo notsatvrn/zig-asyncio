@@ -1,15 +1,13 @@
 const std = @import("std");
-const asyncio = @import("asyncio");
+const folio = @import("folio");
 
 test "basics" {
-    const rt = try asyncio.Runtime.init(std.testing.allocator, null);
+    const rt = try folio.Runtime.init(std.testing.allocator);
 
-    const thread = try rt.spawnThread(basicThread, .{});
+    const worker = try rt.spawnWorker(basicWorker, .{});
 
-    thread.join();
+    worker.join();
     rt.deinit();
 }
 
-fn basicThread(ctx: *asyncio.ThreadContext) void {
-    _ = ctx;
-}
+fn basicWorker() void {}
