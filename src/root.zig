@@ -11,6 +11,8 @@ pub const net = @import("net.zig");
 
 pub const Task = coro.Task;
 pub const SpawnError = coro.Scheduler.SpawnError;
+pub const ResetEvent = coro.ResetEvent;
+pub const CompleteMode = coro.Scheduler.CompleteMode;
 
 // RUNTIME
 
@@ -50,31 +52,32 @@ pub const Runtime = struct {
 
     // WORKERS
 
-    fn wrapWorker(comptime func: anytype) fn (*WorkerContext, anytype) (@typeInfo(@TypeOf(func)).Fn.return_type.?) {
+    fn wrapWorker(comptime func: anytype) fn (*Runtime, anytype) (@typeInfo(@TypeOf(func)).Fn.return_type.?) {
         const typ = @typeInfo(@TypeOf(func));
         if (typ != .Fn) @compileError("worker function is not a function");
         if (typ.Fn.return_type == null) @compileError("worker function does not have a return type");
 
         return struct {
-            pub fn call(ctx: *WorkerContext, args: anytype) typ.Fn.return_type.? {
+            pub fn call(rt: *Runtime, args: anytype) typ.Fn.return_type.? {
                 defer if (WorkerContext.current) |self| {
                     WorkerContext.current = null;
                     self.sched.deinit();
                     self.rt.allocator.destroy(self);
                 };
+
+                const ctx = try rt.allocator.create(WorkerContext);
+                ctx.* = .{ .rt = rt, .sched = try coro.Scheduler.init(rt.allocator, .{}) };
                 WorkerContext.current = ctx;
+
                 return @call(.always_inline, func, args);
             }
         }.call;
     }
 
-    // Spawn a thread and set up a WorkerContext so it can execute coroutines.
-    // This function is not thread-safe. Only call from the thread the Runtime was created in.
-    pub fn spawnWorker(self: *Runtime, comptime function: anytype, args: anytype) !Thread {
+    // Spawn a thread and assign it a WorkerContext so it can execute tasks.
+    pub inline fn spawnWorker(self: *Runtime, comptime func: anytype, args: anytype) !Thread {
         const config = .{ .allocator = self.allocator, .stack_size = self.stack_size };
-        const ctx = try self.allocator.create(WorkerContext);
-        ctx.* = .{ .rt = self, .sched = try coro.Scheduler.init(self.allocator, .{}) };
-        return Thread.spawn(config, wrapWorker(function), .{ ctx, args });
+        return Thread.spawn(config, wrapWorker(func), .{ self, args });
     }
 
     // TASKS
@@ -99,9 +102,13 @@ pub const WorkerContext = struct {
         return self.sched.spawn(func, args, .{});
     }
 
-    pub inline fn spawnBlocking(self: *WorkerContext, func: anytype, args: anytype) !void {
+    pub inline fn spawnBlocking(self: *WorkerContext, func: anytype, args: anytype) SpawnError!ThreadPool.Generic2(func) {
         const config = .{ .allocator = self.rt.allocator, .stack_size = self.rt.stack_size };
-        return self.rt.pool.spawnForCompletition(self.sched, func, args, config);
+        return self.rt.pool.spawnForCompletition(&self.sched, func, args, config);
+    }
+
+    pub inline fn run(self: *WorkerContext, mode: CompleteMode) !void {
+        return self.sched.run(mode);
     }
 };
 
@@ -117,9 +124,14 @@ pub inline fn spawn(comptime func: anytype, args: anytype) !Task.Generic(minilib
     return ctx.spawn(func, args);
 }
 
-pub inline fn spawnBlocking(func: anytype, args: anytype) !void {
+pub inline fn spawnBlocking(func: anytype, args: anytype) !ThreadPool.Generic2(func) {
     const ctx = WorkerContext.current orelse return error.ContextUnavailable;
     return ctx.spawnBlocking(func, args);
+}
+
+pub inline fn run(mode: CompleteMode) !void {
+    const ctx = WorkerContext.current orelse return error.ContextUnavailable;
+    return ctx.run(mode);
 }
 
 pub inline fn sleep(nanoseconds: u64) !void {
