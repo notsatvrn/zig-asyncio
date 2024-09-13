@@ -51,8 +51,8 @@ pub fn get(self: *Self) !Stack {
 
 pub fn free(self: Self, freed: Stack) void {
     for (self.stacks.items) |*stack| if (stack.stack.ptr == freed.ptr) {
-        stack.used = false;
         zero(u8, stack.stack);
+        stack.used = false;
         return;
     };
 }
